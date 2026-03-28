@@ -75,7 +75,9 @@ func ListenHysteria2(bindAddr string, port int, password, certFile, keyFile stri
 	}
 }
 
-func hy2HandleConn(conn quic.Connection, password string) {
+// hy2HandleConn handles a single QUIC connection.
+// In quic-go v0.44+, Conn is a struct; Accept returns *quic.Conn.
+func hy2HandleConn(conn *quic.Conn, password string) {
 	defer conn.CloseWithError(0, "done")
 	ctx := context.Background()
 
@@ -84,7 +86,8 @@ func hy2HandleConn(conn quic.Connection, password string) {
 	if err != nil {
 		return
 	}
-	authed, err := hy2HandleAuth(authStream, password)
+	// quic.Stream is a struct with pointer receivers; pass by address.
+	authed, err := hy2HandleAuth(&authStream, password)
 	authStream.Close()
 	if err != nil {
 		log.Printf("hysteria2 auth from %s: %v", conn.RemoteAddr(), err)
@@ -98,21 +101,20 @@ func hy2HandleConn(conn quic.Connection, password string) {
 	}
 	log.Printf("hysteria2 authed: %s", conn.RemoteAddr())
 
-	// Accept proxy streams.
 	for {
 		stream, err := conn.AcceptStream(ctx)
 		if err != nil {
 			return
 		}
-		go hy2HandleStream(stream, conn.RemoteAddr())
+		go hy2HandleStream(&stream, conn.RemoteAddr())
 	}
 }
 
-// hy2HandleAuth reads ClientHello and writes ServerHello on the auth stream.
+// hy2HandleAuth reads ClientHello and writes ServerHello.
 //
 // ClientHello: [uint16 auth_len][auth][uint64 rx_bps]
 // ServerHello: [uint8 ok][uint64 rx][uint16 msg_len][msg]
-func hy2HandleAuth(stream quic.Stream, password string) (bool, error) {
+func hy2HandleAuth(stream *quic.Stream, password string) (bool, error) {
 	auth, err := hy2ReadStr(stream)
 	if err != nil {
 		return false, fmt.Errorf("read auth: %w", err)
@@ -141,10 +143,10 @@ func hy2HandleAuth(stream quic.Stream, password string) (bool, error) {
 	return ok, nil
 }
 
-// hy2HandleStream reads the type byte and dispatches to the right handler.
+// hy2HandleStream reads the type byte and dispatches.
 //
-// Proxy stream format: [uint8 type][...]
-func hy2HandleStream(stream quic.Stream, remoteAddr net.Addr) {
+// Proxy stream: [uint8 type][...]
+func hy2HandleStream(stream *quic.Stream, remoteAddr net.Addr) {
 	defer stream.Close()
 
 	var typeBuf [1]byte
@@ -163,12 +165,12 @@ func hy2HandleStream(stream quic.Stream, remoteAddr net.Addr) {
 //
 // TCPRequest:  [uint16 addr_len][addr][uint32 req_id]
 // TCPResponse: [uint8 ok][uint16 msg_len][msg]
-func hy2HandleTCP(stream quic.Stream, remoteAddr net.Addr) {
+func hy2HandleTCP(stream *quic.Stream, remoteAddr net.Addr) {
 	addr, err := hy2ReadStr(stream)
 	if err != nil {
 		return
 	}
-	var reqID [4]byte // req_id used by clients for logging; ignored here
+	var reqID [4]byte
 	if _, err := io.ReadFull(stream, reqID[:]); err != nil {
 		return
 	}
@@ -183,13 +185,11 @@ func hy2HandleTCP(stream quic.Stream, remoteAddr net.Addr) {
 	}
 	defer target.Close()
 
-	// Send success response.
 	resp := []byte{0x01}
 	resp = hy2AppendStr(resp, "")
 	if _, err := stream.Write(resp); err != nil {
 		return
 	}
-
 	log.Printf("hysteria2 %s → %s", remoteAddr, addr)
 
 	done := make(chan struct{}, 2)
