@@ -116,46 +116,51 @@ func newFakeTLSClientConn(
 			continue
 		}
 
-		// If a domain is configured, skip only when SNI was parsed AND doesn't match.
-		// If SNI parsing failed (empty string), try all ee-secrets.
+		// Skip only when SNI was actually parsed AND doesn't match.
+		// If SNI is empty (parsing failed or not present), try all ee-secrets.
 		if s.Domain != "" && sni != "" && !strings.EqualFold(sni, s.Domain) {
 			continue
 		}
 
-		// In fake-TLS the nonce is embedded PLAINTEXT in ClientHello
-		// (random[0:32] || session_id[0:32]).  The enc stream starts at
-		// position 0 for the first AppData byte — there is no "nonce
-		// encryption" step like in the dd protocol.
-		proto := binary.LittleEndian.Uint32(nonce[56:60])
-		if proto != protoAbridged && proto != protoIntermediate && proto != protoFull {
-			continue
-		}
-
-		dcID := int16(int32(binary.LittleEndian.Uint32(nonce[60:64])))
-
+		// Key is derived from the received (cipher) nonce bytes — same as dd.
+		// The client generates random C, computes K=SHA256(C[8:40]+secret),
+		// checks that AES_CTR_decrypt(C) has a valid protocol tag, and embeds
+		// C in ClientHello. So the server also uses SHA256(C[8:40]+secret).
 		encKey := sha256.Sum256(concat(nonce[8:40], s.Raw))
 		encIV := nonce[40:56]
 		block, err := aes.NewCipher(encKey[:])
 		if err != nil {
 			continue
 		}
-		encStream := cipher.NewCTR(block, encIV) // position 0
+		encStream := cipher.NewCTR(block, encIV)
+
+		// Decrypt to get the inner plain nonce N (same step as dd).
+		inner := make([]byte, 64)
+		encStream.XORKeyStream(inner, nonce)
+		// encStream is now at position 64; AppData continues from here.
+
+		proto := binary.LittleEndian.Uint32(inner[56:60])
+		if proto != protoAbridged && proto != protoIntermediate && proto != protoFull {
+			continue
+		}
+
+		dcID := int16(int32(binary.LittleEndian.Uint32(inner[60:64])))
 
 		decKey := sha256.Sum256(concat(reverseBytes(nonce[8:40]), s.Raw))
 		decIV := reverseBytes(nonce[40:56])
 		decBlock, _ := aes.NewCipher(decKey[:])
-		decStream := cipher.NewCTR(decBlock, decIV) // position 0
+		decStream := cipher.NewCTR(decBlock, decIV)
 
 		if err := sendFakeTLSServerHello(conn); err != nil {
 			return nil, 0, nil, nil, err
 		}
 
-		// Forward the plain nonce to DC as the Telegram obfuscated init.
+		// Forward the decoded inner nonce to DC (same as dd).
 		return &fakeTLSConn{
 			Conn: conn,
 			enc:  encStream,
 			dec:  decStream,
-		}, dcID, s, nonce, nil
+		}, dcID, s, inner, nil
 	}
 
 	return nil, 0, nil, nil, errNoMatchingSecret
