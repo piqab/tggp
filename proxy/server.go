@@ -57,29 +57,18 @@ func (s *Server) handle(rawConn net.Conn) {
 
 	log.Printf("DBG new conn from %s", rawConn.RemoteAddr())
 
-	// Peek first byte to detect fake-TLS (0x16) vs plain obfuscated.
-	var firstByte [1]byte
-	if _, err := io.ReadFull(rawConn, firstByte[:]); err != nil {
-		log.Printf("DBG first-byte read error from %s: %v", rawConn.RemoteAddr(), err)
+	// Read first 4 bytes to detect protocol and log for diagnostics.
+	peek := make([]byte, 4)
+	n, err := io.ReadAtLeast(rawConn, peek, 1)
+	if err != nil {
+		log.Printf("DBG peek error from %s: %v", rawConn.RemoteAddr(), err)
 		return
 	}
-	log.Printf("DBG first byte 0x%02x from %s", firstByte[0], rawConn.RemoteAddr())
+	peek = peek[:n]
+	log.Printf("DBG peek %d bytes from %s: % 02x", n, rawConn.RemoteAddr(), peek)
 
-	// Detect common wrong proxy types and give a clear error.
-	switch firstByte[0] {
-	case 0x05:
-		log.Printf("WARN %s sent SOCKS5 — configure proxy type as MTProxy, not SOCKS5", rawConn.RemoteAddr())
-		return
-	case 0x04:
-		log.Printf("WARN %s sent SOCKS4 — configure proxy type as MTProxy", rawConn.RemoteAddr())
-		return
-	case 'G', 'P', 'C', 'D', 'H': // HTTP methods GET/POST/CONNECT/DELETE/HEAD
-		log.Printf("WARN %s sent HTTP request — configure proxy type as MTProxy", rawConn.RemoteAddr())
-		return
-	}
-
-	// prependConn re-inserts the peeked byte into the read stream.
-	pconn := &prependConn{Conn: rawConn, buf: []byte{firstByte[0]}}
+	// prependConn re-inserts the peeked bytes into the read stream.
+	pconn := &prependConn{Conn: rawConn, buf: append([]byte(nil), peek...)}
 
 	var (
 		clientConn net.Conn
@@ -89,7 +78,7 @@ func (s *Server) handle(rawConn net.Conn) {
 		err        error
 	)
 
-	if firstByte[0] == 0x16 {
+	if peek[0] == 0x16 {
 		log.Printf("DBG detected fake-TLS (ee) from %s", rawConn.RemoteAddr())
 		clientConn, dcID, secretUsed, innerNonce, err = newFakeTLSClientConn(pconn, s.cfg.Secrets)
 	} else {
