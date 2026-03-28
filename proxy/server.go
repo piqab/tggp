@@ -75,7 +75,6 @@ func (s *Server) handle(rawConn net.Conn) {
 		dcID       int16
 		secretUsed *config.Secret
 		innerNonce []byte
-		err        error
 	)
 
 	if peek[0] == 0x16 {
