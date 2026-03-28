@@ -93,12 +93,13 @@ func (s *Server) handle(rawConn net.Conn) {
 		return
 	}
 
-	dcConn, err := net.DialTimeout("tcp", dcAddr, 10*time.Second)
+	dcConn, err := net.DialTimeout("tcp", dcAddr, 15*time.Second)
 	if err != nil {
 		log.Printf("connect DC%d %s: %v", dcID, dcAddr, err)
 		return
 	}
 	defer dcConn.Close()
+	log.Printf("connected DC%d (%s) for %s", dcID, dcAddr, rawConn.RemoteAddr())
 
 	// Forward the decoded inner 64-byte Telegram init to the DC.
 	if _, err := dcConn.Write(innerNonce); err != nil {
@@ -119,8 +120,11 @@ func (s *Server) handle(rawConn net.Conn) {
 	done := make(chan struct{}, 2)
 
 	go func() {
-		n, _ := io.Copy(dcConn, clientConn)
+		n, err := io.Copy(dcConn, clientConn)
 		s.stats.AddBytesIn(n)
+		if err != nil && !isConnClosedErr(err) {
+			log.Printf("relay client→DC%d: %v", dcID, err)
+		}
 		if tc, ok := dcConn.(*net.TCPConn); ok {
 			tc.CloseWrite()
 		}
@@ -128,8 +132,11 @@ func (s *Server) handle(rawConn net.Conn) {
 	}()
 
 	go func() {
-		n, _ := io.Copy(clientConn, dcConn)
+		n, err := io.Copy(clientConn, dcConn)
 		s.stats.AddBytesOut(n)
+		if err != nil && !isConnClosedErr(err) {
+			log.Printf("relay DC%d→client: %v", dcID, err)
+		}
 		done <- struct{}{}
 	}()
 
