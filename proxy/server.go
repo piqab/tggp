@@ -1,8 +1,10 @@
 package proxy
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"log"
 	"net"
 	"time"
@@ -78,7 +80,9 @@ func (s *Server) handle(rawConn net.Conn) {
 	}
 
 	if err != nil {
-		log.Printf("handshake from %s: %v", rawConn.RemoteAddr(), err)
+		if !isConnClosedErr(err) {
+			log.Printf("handshake from %s: %v", rawConn.RemoteAddr(), err)
+		}
 		return
 	}
 
@@ -146,6 +150,21 @@ func (p *prependConn) Read(b []byte) (int, error) {
 		return n, nil
 	}
 	return p.Conn.Read(b)
+}
+
+// isConnClosedErr reports whether err is a routine connection-closed condition
+// (EOF, unexpected EOF, connection reset) that should not be logged as an error.
+func isConnClosedErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	s := err.Error()
+	return strings.Contains(s, "connection reset by peer") ||
+		strings.Contains(s, "broken pipe") ||
+		strings.Contains(s, "use of closed network connection")
 }
 
 func secretTypeName(t config.SecretType) string {
