@@ -29,7 +29,7 @@ func New(cfg *config.Config, dcList *dc.List, st *stats.Stats) *Server {
 // Listen binds and serves incoming connections. Blocks until error.
 func (s *Server) Listen() error {
 	addr := fmt.Sprintf("%s:%d", s.cfg.BindAddr, s.cfg.Port)
-	ln, err := net.Listen("tcp", addr)
+	ln, err := net.Listen("tcp4", addr)
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", addr, err)
 	}
@@ -115,7 +115,7 @@ func (s *Server) handle(rawConn net.Conn) {
 		return
 	}
 
-	dcConn, err := net.DialTimeout("tcp", dcAddr, 15*time.Second)
+	dcConn, err := net.DialTimeout("tcp4", dcAddr, 15*time.Second)
 	if err != nil {
 		log.Printf("connect DC%d %s: %v", dcID, dcAddr, err)
 		return

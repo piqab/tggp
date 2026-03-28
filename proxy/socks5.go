@@ -31,7 +31,7 @@ func handleSOCKS5(conn net.Conn, peek []byte) {
 
 	log.Printf("socks5 %s → %s", conn.RemoteAddr(), target)
 
-	targetConn, err := net.DialTimeout("tcp", target, 15*time.Second)
+	targetConn, err := net.DialTimeout("tcp4", target, 15*time.Second)
 	if err != nil {
 		// Host unreachable
 		conn.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
@@ -131,11 +131,11 @@ func socks5Handshake(conn net.Conn, peek []byte) (string, error) {
 		host = string(domain)
 
 	case socks5AtypIPv6:
-		b := make([]byte, 16)
-		if _, err := io.ReadFull(conn, b); err != nil {
-			return "", fmt.Errorf("read ipv6: %w", err)
-		}
-		host = "[" + net.IP(b).String() + "]"
+		// Drain the 16-byte address + 2-byte port so the client gets a clean error.
+		buf := make([]byte, 18)
+		io.ReadFull(conn, buf)
+		conn.Write([]byte{0x05, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0}) // atyp not supported
+		return "", fmt.Errorf("IPv6 not supported")
 
 	default:
 		conn.Write([]byte{0x05, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
