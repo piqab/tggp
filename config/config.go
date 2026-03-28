@@ -35,12 +35,16 @@ func (s *Secret) HexString() string {
 }
 
 type Config struct {
-	BindAddr   string
-	Port       int
-	Socks5Port int
-	Secrets    []Secret
-	Timeout    time.Duration
-	StatsAddr  string
+	BindAddr          string
+	Port              int
+	Socks5Port        int
+	Hysteria2Port     int
+	Hysteria2Password string
+	Hysteria2CertFile string
+	Hysteria2KeyFile  string
+	Secrets           []Secret
+	Timeout           time.Duration
+	StatsAddr         string
 }
 
 // Load reads configuration from environment variables.
@@ -55,11 +59,15 @@ type Config struct {
 //   STATS_ADDR  — stats HTTP addr (default: :8080)
 func Load() (*Config, error) {
 	cfg := &Config{
-		BindAddr:   envStr("BIND_ADDR", "0.0.0.0"),
-		Port:       envInt("PORT", 443),
-		Socks5Port: envInt("SOCKS5_PORT", 0),
-		Timeout:    time.Duration(envInt("TIMEOUT_SEC", 120)) * time.Second,
-		StatsAddr:  envStr("STATS_ADDR", ":8080"),
+		BindAddr:          envStr("BIND_ADDR", "0.0.0.0"),
+		Port:              envInt("PORT", 443),
+		Socks5Port:        envInt("SOCKS5_PORT", 0),
+		Hysteria2Port:     envInt("HYSTERIA2_PORT", 0),
+		Hysteria2Password: envStr("HYSTERIA2_PASSWORD", ""),
+		Hysteria2CertFile: envStr("HYSTERIA2_CERT", ""),
+		Hysteria2KeyFile:  envStr("HYSTERIA2_KEY", ""),
+		Timeout:           time.Duration(envInt("TIMEOUT_SEC", 120)) * time.Second,
+		StatsAddr:         envStr("STATS_ADDR", ":8080"),
 	}
 
 	raw := os.Getenv("SECRETS")
