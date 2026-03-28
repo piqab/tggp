@@ -177,16 +177,21 @@ func readClientHello(conn net.Conn) (nonce []byte, sni string, err error) {
 	// Full 5-byte TLS record header: content_type(1) + version(2) + length(2)
 	hdr := make([]byte, 5)
 	if _, err = io.ReadFull(conn, hdr); err != nil {
+		err = fmt.Errorf("read tls header: %w", err)
 		return
 	}
+	log.Printf("DBG ee: TLS header bytes: %02x %02x %02x %02x %02x",
+		hdr[0], hdr[1], hdr[2], hdr[3], hdr[4])
 	if hdr[0] != tlsHandshake {
-		err = errors.New("not a TLS handshake record")
+		err = fmt.Errorf("not a TLS handshake record (type=0x%02x)", hdr[0])
 		return
 	}
 	recLen := int(binary.BigEndian.Uint16(hdr[3:5]))
+	log.Printf("DBG ee: TLS record body len=%d", recLen)
 
 	rec := make([]byte, recLen)
 	if _, err = io.ReadFull(conn, rec); err != nil {
+		err = fmt.Errorf("read tls body (recLen=%d): %w", recLen, err)
 		return
 	}
 

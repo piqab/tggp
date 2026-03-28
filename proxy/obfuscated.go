@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -57,7 +58,7 @@ func newObfuscatedClientConn(
 ) (net.Conn, int16, *config.Secret, []byte, error) {
 	nonce := make([]byte, 64)
 	if _, err := io.ReadFull(conn, nonce); err != nil {
-		return nil, 0, nil, nil, err
+		return nil, 0, nil, nil, fmt.Errorf("read nonce: %w", err)
 	}
 
 	for i := range secrets {
