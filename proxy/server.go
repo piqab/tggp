@@ -67,6 +67,21 @@ func (s *Server) handle(rawConn net.Conn) {
 	peek = peek[:n]
 	log.Printf("DBG peek %d bytes from %s: % 02x", n, rawConn.RemoteAddr(), peek)
 
+	// Detect wrong proxy protocols and give a clear error.
+	if len(peek) >= 1 {
+		switch peek[0] {
+		case 0x05:
+			log.Printf("WARN %s sent SOCKS5 — proxy type in Telegram must be MTProxy, not SOCKS5", rawConn.RemoteAddr())
+			return
+		case 0x04:
+			log.Printf("WARN %s sent SOCKS4 — proxy type in Telegram must be MTProxy", rawConn.RemoteAddr())
+			return
+		case 'G', 'P', 'C', 'D', 'H':
+			log.Printf("WARN %s sent HTTP — proxy type in Telegram must be MTProxy", rawConn.RemoteAddr())
+			return
+		}
+	}
+
 	// prependConn re-inserts the peeked bytes into the read stream.
 	pconn := &prependConn{Conn: rawConn, buf: append([]byte(nil), peek...)}
 
