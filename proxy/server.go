@@ -1,0 +1,159 @@
+package proxy
+
+import (
+	"fmt"
+	"io"
+	"log"
+	"net"
+	"time"
+
+	"mtproxy/config"
+	"mtproxy/dc"
+	"mtproxy/stats"
+)
+
+// Server is the MTProxy TCP server.
+type Server struct {
+	cfg    *config.Config
+	dcList *dc.List
+	stats  *stats.Stats
+}
+
+// New creates a new Server.
+func New(cfg *config.Config, dcList *dc.List, st *stats.Stats) *Server {
+	return &Server{cfg: cfg, dcList: dcList, stats: st}
+}
+
+// Listen binds and serves incoming connections. Blocks until error.
+func (s *Server) Listen() error {
+	addr := fmt.Sprintf("%s:%d", s.cfg.BindAddr, s.cfg.Port)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", addr, err)
+	}
+	defer ln.Close()
+
+	log.Printf("MTProxy listening on %s (%d secrets)", addr, len(s.cfg.Secrets))
+	for i, sec := range s.cfg.Secrets {
+		log.Printf("  [%d] %s  type=%s  link: tg://proxy?server=HOST&port=%d&secret=%s",
+			i, sec.Name, secretTypeName(sec.Type), s.cfg.Port, sec.HexString())
+	}
+
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			log.Printf("accept: %v", err)
+			continue
+		}
+		go s.handle(conn)
+	}
+}
+
+func (s *Server) handle(rawConn net.Conn) {
+	defer rawConn.Close()
+	rawConn.SetDeadline(time.Now().Add(s.cfg.Timeout))
+
+	// Peek first byte to detect fake-TLS (0x16) vs plain obfuscated.
+	var firstByte [1]byte
+	if _, err := io.ReadFull(rawConn, firstByte[:]); err != nil {
+		return
+	}
+
+	// prependConn re-inserts the peeked byte into the read stream.
+	pconn := &prependConn{Conn: rawConn, buf: []byte{firstByte[0]}}
+
+	var (
+		clientConn  net.Conn
+		dcID        int16
+		secretUsed  *config.Secret
+		innerNonce  []byte
+		err         error
+	)
+
+	if firstByte[0] == 0x16 {
+		// Possible fake-TLS (ee-secret); pconn still has 0x16 in its buffer.
+		clientConn, dcID, secretUsed, innerNonce, err = newFakeTLSClientConn(pconn, s.cfg.Secrets)
+	} else {
+		clientConn, dcID, secretUsed, innerNonce, err = newObfuscatedClientConn(pconn, s.cfg.Secrets)
+	}
+
+	if err != nil {
+		log.Printf("handshake from %s: %v", rawConn.RemoteAddr(), err)
+		return
+	}
+
+	// Connect to the Telegram DC.
+	dcAddr, err := s.dcList.Get(dcID)
+	if err != nil {
+		log.Printf("DC %d from %s: %v", dcID, rawConn.RemoteAddr(), err)
+		return
+	}
+
+	dcConn, err := net.DialTimeout("tcp", dcAddr, 10*time.Second)
+	if err != nil {
+		log.Printf("connect DC%d %s: %v", dcID, dcAddr, err)
+		return
+	}
+	defer dcConn.Close()
+
+	// Forward the decoded inner 64-byte Telegram init to the DC.
+	if _, err := dcConn.Write(innerNonce); err != nil {
+		log.Printf("write init to DC%d: %v", dcID, err)
+		return
+	}
+
+	// Remove connection deadline for the relay phase.
+	rawConn.SetDeadline(time.Time{})
+
+	s.stats.ConnOpen(secretUsed.Name)
+	defer s.stats.ConnClose(secretUsed.Name)
+
+	log.Printf("relay  %s → DC%d (%s)  secret=%s",
+		rawConn.RemoteAddr(), dcID, dcAddr, secretUsed.Name)
+
+	// Bidirectional relay.
+	done := make(chan struct{}, 2)
+
+	go func() {
+		n, _ := io.Copy(dcConn, clientConn)
+		s.stats.AddBytesIn(n)
+		if tc, ok := dcConn.(*net.TCPConn); ok {
+			tc.CloseWrite()
+		}
+		done <- struct{}{}
+	}()
+
+	go func() {
+		n, _ := io.Copy(clientConn, dcConn)
+		s.stats.AddBytesOut(n)
+		done <- struct{}{}
+	}()
+
+	<-done
+}
+
+// prependConn is a net.Conn that prepends already-read bytes before returning
+// data from the underlying connection.
+type prependConn struct {
+	net.Conn
+	buf []byte
+}
+
+func (p *prependConn) Read(b []byte) (int, error) {
+	if len(p.buf) > 0 {
+		n := copy(b, p.buf)
+		p.buf = p.buf[n:]
+		return n, nil
+	}
+	return p.Conn.Read(b)
+}
+
+func secretTypeName(t config.SecretType) string {
+	switch t {
+	case config.SecretTypeDD:
+		return "dd"
+	case config.SecretTypeEE:
+		return "ee (fake-TLS)"
+	}
+	return "unknown"
+}
