@@ -229,12 +229,12 @@ func readClientHello(conn net.Conn) (nonce []byte, sni string, err error) {
 	csLen := int(binary.BigEndian.Uint16(rec[pos : pos+2]))
 	pos += 2 + csLen
 
-	// compression_methods_len (1 byte) + data
+	// compression_methods_len (1 byte) + N bytes of data
 	if pos+1 > len(rec) {
 		return
 	}
-	pos += 1 + int(rec[pos])
-	pos++
+	compLen := int(rec[pos])
+	pos += 1 + compLen // skip length byte + compression methods
 
 	// extensions_len (2 bytes)
 	if pos+2 > len(rec) {
@@ -243,6 +243,9 @@ func readClientHello(conn net.Conn) (nonce []byte, sni string, err error) {
 	extTotalLen := int(binary.BigEndian.Uint16(rec[pos : pos+2]))
 	pos += 2
 	extEnd := pos + extTotalLen
+	if extEnd > len(rec) {
+		extEnd = len(rec) // clamp: never read outside the record buffer
+	}
 
 	// Walk extensions looking for SNI (type 0x0000).
 	for pos+4 <= extEnd {
@@ -250,14 +253,19 @@ func readClientHello(conn net.Conn) (nonce []byte, sni string, err error) {
 		extLen := int(binary.BigEndian.Uint16(rec[pos+2 : pos+4]))
 		pos += 4
 
-		if extType == 0x0000 && extLen > 5 && pos+extLen <= extEnd {
+		extDataEnd := pos + extLen
+		if extDataEnd > extEnd {
+			break // malformed extension, stop parsing
+		}
+
+		if extType == 0x0000 && extLen >= 5 {
 			// server_name_list_length (2) + name_type (1) + name_length (2) + name
 			nameLen := int(binary.BigEndian.Uint16(rec[pos+3 : pos+5]))
-			if pos+5+nameLen <= extEnd {
+			if pos+5+nameLen <= extDataEnd {
 				sni = string(rec[pos+5 : pos+5+nameLen])
 			}
 		}
-		pos += extLen
+		pos = extDataEnd
 	}
 	return
 }
