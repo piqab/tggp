@@ -87,7 +87,7 @@ func hy2HandleConn(conn *quic.Conn, password string) {
 		return
 	}
 	// quic.Stream is a struct with pointer receivers; pass by address.
-	authed, err := hy2HandleAuth(&authStream, password)
+	authed, err := hy2HandleAuth(authStream, password)
 	authStream.Close()
 	if err != nil {
 		log.Printf("hysteria2 auth from %s: %v", conn.RemoteAddr(), err)
@@ -106,7 +106,7 @@ func hy2HandleConn(conn *quic.Conn, password string) {
 		if err != nil {
 			return
 		}
-		go hy2HandleStream(&stream, conn.RemoteAddr())
+		go hy2HandleStream(stream, conn.RemoteAddr())
 	}
 }
 
