@@ -15,9 +15,18 @@ MTProto proxy server written in Go. Supports `dd` (obfuscated2), `ee` (fake-TLS)
 
 ## Requirements
 
-- Go 1.22+
+- Go 1.23+ (required by quic-go for Hysteria2; MTProxy/SOCKS5 alone work with 1.22)
 - Linux (recommended), macOS or Windows
 - Port 443 requires `root` or `CAP_NET_BIND_SERVICE`
+
+### Install Go 1.23 on Linux
+
+```bash
+wget https://go.dev/dl/go1.23.8.linux-amd64.tar.gz
+sudo rm -rf /usr/local/go
+sudo tar -C /usr/local -xzf go1.23.8.linux-amd64.tar.gz
+export PATH=$PATH:/usr/local/go/bin   # add to ~/.bashrc to persist
+```
 
 ## Quick Start
 
@@ -26,7 +35,8 @@ MTProto proxy server written in Go. Supports `dd` (obfuscated2), `ee` (fake-TLS)
 git clone https://github.com/yourname/mtproxy
 cd mtproxy
 
-# 2. Pull dependencies (needed for Hysteria2)
+# 2. Pull dependencies
+go get github.com/quic-go/quic-go@latest
 go mod tidy
 
 # 3. Generate a secret
