@@ -60,10 +60,16 @@ func handleSOCKS5(conn net.Conn, peek []byte) {
 }
 
 // socks5Handshake handles the SOCKS5 negotiation and returns the target address.
-// peek contains bytes already read (the greeting: version + nmethods + methods).
+// peek may be nil or contain bytes already read from conn (greeting start).
 func socks5Handshake(conn net.Conn, peek []byte) (string, error) {
+	// Ensure we have at least the 2-byte greeting header.
 	if len(peek) < 2 {
-		return "", fmt.Errorf("greeting too short")
+		need := 2 - len(peek)
+		extra := make([]byte, need)
+		if _, err := io.ReadFull(conn, extra); err != nil {
+			return "", fmt.Errorf("read greeting: %w", err)
+		}
+		peek = append(peek, extra...)
 	}
 	if peek[0] != socks5Version {
 		return "", fmt.Errorf("unsupported SOCKS version %d", peek[0])

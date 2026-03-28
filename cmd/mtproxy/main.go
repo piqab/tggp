@@ -43,8 +43,9 @@ const usage = `
                 SECRETS=alice:dd0102030405060708090a0b0c0d0e0f
                 SECRETS=alice:dd...,bob:ee...676f6f676c652e636f6d
 
-  BIND_ADDR   Listen address (default: 0.0.0.0)
-  PORT        Listen port    (default: 443)
-  TIMEOUT_SEC Idle timeout   (default: 120)
-  STATS_ADDR  HTTP stats     (default: :8080)
+  BIND_ADDR   Listen address        (default: 0.0.0.0)
+  PORT        MTProxy listen port   (default: 443)
+  SOCKS5_PORT SOCKS5 listen port    (default: disabled)
+  TIMEOUT_SEC Idle timeout          (default: 120)
+  STATS_ADDR  HTTP stats            (default: :8080)
 `

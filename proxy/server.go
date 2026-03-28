@@ -41,6 +41,10 @@ func (s *Server) Listen() error {
 			i, sec.Name, secretTypeName(sec.Type), s.cfg.Port, sec.HexString())
 	}
 
+	if s.cfg.Socks5Port != 0 {
+		go s.listenSOCKS5()
+	}
+
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
@@ -48,6 +52,29 @@ func (s *Server) Listen() error {
 			continue
 		}
 		go s.handle(conn)
+	}
+}
+
+// listenSOCKS5 runs a dedicated SOCKS5 listener on cfg.Socks5Port.
+func (s *Server) listenSOCKS5() {
+	addr := fmt.Sprintf("%s:%d", s.cfg.BindAddr, s.cfg.Socks5Port)
+	ln, err := net.Listen("tcp4", addr)
+	if err != nil {
+		log.Printf("socks5 listen %s: %v", addr, err)
+		return
+	}
+	defer ln.Close()
+	log.Printf("SOCKS5 listening on %s", addr)
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			log.Printf("socks5 accept: %v", err)
+			continue
+		}
+		go func(c net.Conn) {
+			defer c.Close()
+			handleSOCKS5(c, nil)
+		}(conn)
 	}
 }
 
@@ -71,8 +98,7 @@ func (s *Server) handle(rawConn net.Conn) {
 	if len(peek) >= 1 {
 		switch peek[0] {
 		case 0x05:
-			log.Printf("socks5 from %s", rawConn.RemoteAddr())
-			handleSOCKS5(rawConn, peek)
+			log.Printf("WARN %s sent SOCKS5 on MTProxy port", rawConn.RemoteAddr())
 			return
 		case 0x04:
 			log.Printf("WARN %s sent SOCKS4 — proxy type in Telegram must be MTProxy", rawConn.RemoteAddr())
