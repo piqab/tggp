@@ -116,45 +116,46 @@ func newFakeTLSClientConn(
 			continue
 		}
 
-		// If a domain is configured, the SNI must match.
-		if s.Domain != "" && !strings.EqualFold(sni, s.Domain) {
+		// If a domain is configured, skip only when SNI was parsed AND doesn't match.
+		// If SNI parsing failed (empty string), try all ee-secrets.
+		if s.Domain != "" && sni != "" && !strings.EqualFold(sni, s.Domain) {
 			continue
 		}
 
-		encKey := sha256.Sum256(concat(nonce[8:40], s.Raw))
-		encIV := nonce[40:56]
-
-		block, err := aes.NewCipher(encKey[:])
-		if err != nil {
-			continue
-		}
-		encStream := cipher.NewCTR(block, encIV)
-
-		inner := make([]byte, 64)
-		encStream.XORKeyStream(inner, nonce)
-
-		proto := binary.LittleEndian.Uint32(inner[56:60])
+		// In fake-TLS the nonce is embedded PLAINTEXT in ClientHello
+		// (random[0:32] || session_id[0:32]).  The enc stream starts at
+		// position 0 for the first AppData byte — there is no "nonce
+		// encryption" step like in the dd protocol.
+		proto := binary.LittleEndian.Uint32(nonce[56:60])
 		if proto != protoAbridged && proto != protoIntermediate && proto != protoFull {
 			continue
 		}
 
-		dcID := int16(int32(binary.LittleEndian.Uint32(inner[60:64])))
+		dcID := int16(int32(binary.LittleEndian.Uint32(nonce[60:64])))
+
+		encKey := sha256.Sum256(concat(nonce[8:40], s.Raw))
+		encIV := nonce[40:56]
+		block, err := aes.NewCipher(encKey[:])
+		if err != nil {
+			continue
+		}
+		encStream := cipher.NewCTR(block, encIV) // position 0
 
 		decKey := sha256.Sum256(concat(reverseBytes(nonce[8:40]), s.Raw))
 		decIV := reverseBytes(nonce[40:56])
 		decBlock, _ := aes.NewCipher(decKey[:])
-		decStream := cipher.NewCTR(decBlock, decIV)
+		decStream := cipher.NewCTR(decBlock, decIV) // position 0
 
-		// Send fake TLS ServerHello before handing off the connection.
 		if err := sendFakeTLSServerHello(conn); err != nil {
 			return nil, 0, nil, nil, err
 		}
 
+		// Forward the plain nonce to DC as the Telegram obfuscated init.
 		return &fakeTLSConn{
 			Conn: conn,
 			enc:  encStream,
 			dec:  decStream,
-		}, dcID, s, inner, nil
+		}, dcID, s, nonce, nil
 	}
 
 	return nil, 0, nil, nil, errNoMatchingSecret
