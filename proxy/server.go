@@ -65,6 +65,19 @@ func (s *Server) handle(rawConn net.Conn) {
 	}
 	log.Printf("DBG first byte 0x%02x from %s", firstByte[0], rawConn.RemoteAddr())
 
+	// Detect common wrong proxy types and give a clear error.
+	switch firstByte[0] {
+	case 0x05:
+		log.Printf("WARN %s sent SOCKS5 — configure proxy type as MTProxy, not SOCKS5", rawConn.RemoteAddr())
+		return
+	case 0x04:
+		log.Printf("WARN %s sent SOCKS4 — configure proxy type as MTProxy", rawConn.RemoteAddr())
+		return
+	case 'G', 'P', 'C', 'D', 'H': // HTTP methods GET/POST/CONNECT/DELETE/HEAD
+		log.Printf("WARN %s sent HTTP request — configure proxy type as MTProxy", rawConn.RemoteAddr())
+		return
+	}
+
 	// prependConn re-inserts the peeked byte into the read stream.
 	pconn := &prependConn{Conn: rawConn, buf: []byte{firstByte[0]}}
 
