@@ -71,7 +71,8 @@ func (s *Server) handle(rawConn net.Conn) {
 	if len(peek) >= 1 {
 		switch peek[0] {
 		case 0x05:
-			log.Printf("WARN %s sent SOCKS5 — proxy type in Telegram must be MTProxy, not SOCKS5", rawConn.RemoteAddr())
+			log.Printf("socks5 from %s", rawConn.RemoteAddr())
+			handleSOCKS5(rawConn, peek)
 			return
 		case 0x04:
 			log.Printf("WARN %s sent SOCKS4 — proxy type in Telegram must be MTProxy", rawConn.RemoteAddr())
