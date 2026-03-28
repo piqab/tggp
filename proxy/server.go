@@ -55,36 +55,41 @@ func (s *Server) handle(rawConn net.Conn) {
 	defer rawConn.Close()
 	rawConn.SetDeadline(time.Now().Add(s.cfg.Timeout))
 
+	log.Printf("DBG new conn from %s", rawConn.RemoteAddr())
+
 	// Peek first byte to detect fake-TLS (0x16) vs plain obfuscated.
 	var firstByte [1]byte
 	if _, err := io.ReadFull(rawConn, firstByte[:]); err != nil {
+		log.Printf("DBG first-byte read error from %s: %v", rawConn.RemoteAddr(), err)
 		return
 	}
+	log.Printf("DBG first byte 0x%02x from %s", firstByte[0], rawConn.RemoteAddr())
 
 	// prependConn re-inserts the peeked byte into the read stream.
 	pconn := &prependConn{Conn: rawConn, buf: []byte{firstByte[0]}}
 
 	var (
-		clientConn  net.Conn
-		dcID        int16
-		secretUsed  *config.Secret
-		innerNonce  []byte
-		err         error
+		clientConn net.Conn
+		dcID       int16
+		secretUsed *config.Secret
+		innerNonce []byte
+		err        error
 	)
 
 	if firstByte[0] == 0x16 {
-		// Possible fake-TLS (ee-secret); pconn still has 0x16 in its buffer.
+		log.Printf("DBG detected fake-TLS (ee) from %s", rawConn.RemoteAddr())
 		clientConn, dcID, secretUsed, innerNonce, err = newFakeTLSClientConn(pconn, s.cfg.Secrets)
 	} else {
+		log.Printf("DBG detected obfuscated (dd) from %s", rawConn.RemoteAddr())
 		clientConn, dcID, secretUsed, innerNonce, err = newObfuscatedClientConn(pconn, s.cfg.Secrets)
 	}
 
 	if err != nil {
-		if !isConnClosedErr(err) {
-			log.Printf("handshake from %s: %v", rawConn.RemoteAddr(), err)
-		}
+		log.Printf("DBG handshake error from %s: %v (suppressed=%v)",
+			rawConn.RemoteAddr(), err, isConnClosedErr(err))
 		return
 	}
+	log.Printf("DBG handshake OK from %s: DC=%d secret=%s", rawConn.RemoteAddr(), dcID, secretUsed.Name)
 
 	// Connect to the Telegram DC.
 	dcAddr, err := s.dcList.Get(dcID)

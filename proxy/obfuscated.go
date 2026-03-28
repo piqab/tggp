@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"log"
 	"net"
 
 	"mtproxy/config"
@@ -78,11 +79,10 @@ func newObfuscatedClientConn(
 		// Decrypt the 64-byte init to read inner nonce.
 		inner := make([]byte, 64)
 		encStream.XORKeyStream(inner, nonce)
-		// encStream is now at counter position 4 (64 bytes / 16 = 4 blocks).
-		// Subsequent client data continues from this position — stream is reused.
 
 		// Validate protocol tag.
 		proto := binary.LittleEndian.Uint32(inner[56:60])
+		log.Printf("DBG dd: secret %q proto=0x%08x (want 0xefefefef/0xdddddddd/0xfefefefe)", s.Name, proto)
 		if proto != protoAbridged && proto != protoIntermediate && proto != protoFull {
 			continue
 		}

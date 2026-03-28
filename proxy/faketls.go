@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"strings"
 
@@ -109,6 +110,8 @@ func newFakeTLSClientConn(
 	if err != nil {
 		return nil, 0, nil, nil, fmt.Errorf("faketls: %w", err)
 	}
+	log.Printf("DBG ee: ClientHello ok, SNI=%q, nonce[56:60]=%08x (raw, before decrypt)",
+		sni, binary.LittleEndian.Uint32(nonce[56:60]))
 
 	for i := range secrets {
 		s := &secrets[i]
@@ -119,13 +122,11 @@ func newFakeTLSClientConn(
 		// Skip only when SNI was actually parsed AND doesn't match.
 		// If SNI is empty (parsing failed or not present), try all ee-secrets.
 		if s.Domain != "" && sni != "" && !strings.EqualFold(sni, s.Domain) {
+			log.Printf("DBG ee: skip secret %q: SNI %q != domain %q", s.Name, sni, s.Domain)
 			continue
 		}
 
 		// Key is derived from the received (cipher) nonce bytes — same as dd.
-		// The client generates random C, computes K=SHA256(C[8:40]+secret),
-		// checks that AES_CTR_decrypt(C) has a valid protocol tag, and embeds
-		// C in ClientHello. So the server also uses SHA256(C[8:40]+secret).
 		encKey := sha256.Sum256(concat(nonce[8:40], s.Raw))
 		encIV := nonce[40:56]
 		block, err := aes.NewCipher(encKey[:])
@@ -140,6 +141,8 @@ func newFakeTLSClientConn(
 		// encStream is now at position 64; AppData continues from here.
 
 		proto := binary.LittleEndian.Uint32(inner[56:60])
+		log.Printf("DBG ee: secret %q proto after decrypt = 0x%08x (want 0xefefefef/0xdddddddd/0xfefefefe)",
+			s.Name, proto)
 		if proto != protoAbridged && proto != protoIntermediate && proto != protoFull {
 			continue
 		}
