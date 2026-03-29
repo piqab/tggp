@@ -70,8 +70,15 @@ if not "%ANDROID_HOME%"=="" (
 )
 
 :: ── Download dependencies ─────────────────────────────────────────────────────
-echo =^> Downloading Go module dependencies...
+echo =^> Fetching golang.org/x/mobile...
 cd /d "%SCRIPT_DIR%"
+go get golang.org/x/mobile@latest
+if errorlevel 1 (
+    echo ERROR: go get golang.org/x/mobile failed.
+    exit /b 1
+)
+
+echo =^> Tidying modules...
 go mod tidy
 if errorlevel 1 (
     echo ERROR: go mod tidy failed.

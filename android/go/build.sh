@@ -29,8 +29,11 @@ if ! command -v gomobile &>/dev/null; then
     exit 1
 fi
 
-echo "==> Downloading Go module dependencies…"
+echo "==> Fetching golang.org/x/mobile…"
 cd "${SCRIPT_DIR}"
+go get golang.org/x/mobile@latest
+
+echo "==> Tidying modules…"
 go mod tidy
 
 echo "==> Building Android AAR (targets: arm, arm64, 386, amd64)…"
