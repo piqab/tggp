@@ -57,6 +57,8 @@ android/
 
 ### Step 1 — Build the Go AAR
 
+#### Linux / macOS
+
 ```bash
 cd android/go
 
@@ -64,17 +66,34 @@ cd android/go
 go install golang.org/x/mobile/cmd/gomobile@latest
 gomobile init
 
-# Build the Android library
+# Build
 ./build.sh
-# or manually:
-# gomobile bind -target=android -o ../app/libs/hysteria2.aar .
+```
+
+#### Windows
+
+```bat
+cd android\go
+
+:: Install gomobile (once)
+go install golang.org/x/mobile/cmd/gomobile@latest
+gomobile init
+
+:: Build
+build.bat
+```
+
+The script auto-detects the Android NDK from `%LOCALAPPDATA%\Android\Sdk\ndk\`.
+If detection fails, set the path manually before running:
+
+```bat
+set ANDROID_NDK_HOME=C:\Users\%USERNAME%\AppData\Local\Android\Sdk\ndk\26.3.11579264
+build.bat
 ```
 
 Output: `android/app/libs/hysteria2.aar`
 
-> **Note**: `build.sh` requires the Android NDK.
-> Install it via Android Studio: **SDK Manager → SDK Tools → NDK (Side by side)**
-> or set the path manually: `export ANDROID_NDK_HOME=~/Android/Sdk/ndk/<version>`
+> **Install NDK**: Android Studio → **SDK Manager → SDK Tools → NDK (Side by side)**
 
 ### Step 2 — Build the Android app
 
@@ -85,10 +104,14 @@ Open `android/` in Android Studio, sync Gradle, then:
 Or from the command line:
 
 ```bash
-cd android
-./gradlew assembleDebug
-# Output: app/build/outputs/apk/debug/app-debug.apk
+# Linux / macOS
+cd android && ./gradlew assembleDebug
+
+# Windows
+cd android && gradlew.bat assembleDebug
 ```
+
+Output: `app/build/outputs/apk/debug/app-debug.apk`
 
 ## Server configuration
 
