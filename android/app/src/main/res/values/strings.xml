@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Hysteria2 Proxy</string>
+    <string name="vpn_description">Routes all traffic through Hysteria2 proxy</string>
+
+    <!-- Hints / labels -->
+    <string name="hint_server">Server (hostname or IP)</string>
+    <string name="hint_port">Port</string>
+    <string name="hint_password">Password</string>
+    <string name="label_insecure">Allow insecure TLS (skip certificate verification)</string>
+
+    <!-- Buttons -->
+    <string name="btn_connect">Connect</string>
+    <string name="btn_disconnect">Disconnect</string>
+
+    <!-- Status messages -->
+    <string name="status_disconnected">Disconnected</string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_disconnecting">Disconnecting…</string>
+    <string name="status_error">Error: %1$s</string>
+
+    <!-- Validation errors -->
+    <string name="error_server_required">Server address is required</string>
+    <string name="error_port_invalid">Port must be 1–65535</string>
+    <string name="error_password_required">Password is required</string>
+    <string name="vpn_permission_denied">VPN permission denied</string>
+
+    <!-- Notification -->
+    <string name="notif_channel_vpn_name">VPN Service</string>
+    <string name="notif_channel_vpn_desc">Shows when the VPN is active</string>
+    <string name="notif_title">Hysteria2 VPN Active</string>
+    <string name="notif_text">All traffic is routed through your proxy</string>
+</resources>
