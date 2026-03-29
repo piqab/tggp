@@ -32,9 +32,13 @@ fi
 echo "==> Fetching golang.org/x/mobile…"
 cd "${SCRIPT_DIR}"
 go get golang.org/x/mobile@latest
+go get golang.org/x/mobile/bind
 
 echo "==> Tidying modules…"
 go mod tidy
+
+echo "==> Initialising gomobile…"
+gomobile init
 
 echo "==> Building Android AAR (targets: arm, arm64, 386, amd64)…"
 gomobile bind \

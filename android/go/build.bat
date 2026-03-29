@@ -77,11 +77,23 @@ if errorlevel 1 (
     echo ERROR: go get golang.org/x/mobile failed.
     exit /b 1
 )
+go get golang.org/x/mobile/bind
+if errorlevel 1 (
+    echo ERROR: go get golang.org/x/mobile/bind failed.
+    exit /b 1
+)
 
 echo =^> Tidying modules...
 go mod tidy
 if errorlevel 1 (
     echo ERROR: go mod tidy failed.
+    exit /b 1
+)
+
+echo =^> Initialising gomobile...
+gomobile init
+if errorlevel 1 (
+    echo ERROR: gomobile init failed.
     exit /b 1
 )
 
