@@ -33,6 +33,59 @@ if errorlevel 1 (
 echo =^> Go found:
 go version
 
+:: ── Check / auto-detect JDK ──────────────────────────────────────────────────
+where javac >nul 2>&1
+if errorlevel 1 (
+    echo =^> javac not in PATH, searching for JDK...
+
+    :: Android Studio bundled JDK
+    set "JDKS_ROOT=%LOCALAPPDATA%\Programs\Android Studio\jbr\bin"
+    if exist "%JDKS_ROOT%\javac.exe" (
+        set "PATH=%JDKS_ROOT%;%PATH%"
+        echo =^> Using Android Studio JDK: %JDKS_ROOT%
+        goto :jdk_ok
+    )
+
+    :: Adoptium / Eclipse Temurin in Program Files
+    for /d %%d in ("%ProgramFiles%\Eclipse Adoptium\jdk-*") do (
+        if exist "%%d\bin\javac.exe" (
+            set "PATH=%%d\bin;%PATH%"
+            set "JAVA_HOME=%%d"
+            echo =^> Using JDK: %%d
+            goto :jdk_ok
+        )
+    )
+
+    :: Oracle / OpenJDK in Program Files
+    for /d %%d in ("%ProgramFiles%\Java\jdk*") do (
+        if exist "%%d\bin\javac.exe" (
+            set "PATH=%%d\bin;%PATH%"
+            set "JAVA_HOME=%%d"
+            echo =^> Using JDK: %%d
+            goto :jdk_ok
+        )
+    )
+
+    :: Microsoft JDK
+    for /d %%d in ("%ProgramFiles%\Microsoft\jdk-*") do (
+        if exist "%%d\bin\javac.exe" (
+            set "PATH=%%d\bin;%PATH%"
+            set "JAVA_HOME=%%d"
+            echo =^> Using JDK: %%d
+            goto :jdk_ok
+        )
+    )
+
+    echo ERROR: javac not found. Install JDK 17 from one of:
+    echo   https://adoptium.net/
+    echo   https://www.oracle.com/java/technologies/downloads/
+    echo   OR install via Android Studio: File ^> Project Structure ^> SDK Location
+    echo   Then add JDK\bin to your PATH or set JAVA_HOME.
+    exit /b 1
+)
+:jdk_ok
+echo =^> javac found.
+
 :: ── Check gomobile ────────────────────────────────────────────────────────────
 where gomobile >nul 2>&1
 if errorlevel 1 (
