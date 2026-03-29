@@ -17,4 +17,7 @@
     <!-- Status indicator colours -->
     <color name="indicator_connected">#34C759</color>
     <color name="indicator_disconnected">#8E8E93</color>
+
+    <!-- Launcher icon background -->
+    <color name="ic_launcher_background">#1565C0</color>
 </resources>
