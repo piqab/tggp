@@ -1,9 +1,9 @@
 # Hysteria2 Proxy — Android
 
-Android VPN-клієнт для підключення до [mtproxy](../README.md) сервера через Hysteria2 (QUIC/UDP).
-Весь трафік пристрою маршрутизується через зашифрований тунель.
+Android VPN client for connecting to the [mtproxy](../README.md) server via Hysteria2 (QUIC/UDP).
+All device traffic is routed through an encrypted tunnel.
 
-## Як це працює
+## How it works
 
 ```
 Device apps
@@ -12,157 +12,151 @@ Android VpnService  ──  TUN interface (10.0.0.1/24)
     ↓
 TunWorker  ──  parses IPv4/TCP packets  →  local SOCKS5 (127.0.0.1:10808)
     ↓
-Go hysteria2 client  ──  QUIC stream per connection
+Go hysteria2 client  ──  one QUIC stream per TCP connection
     ↓
 Hysteria2 server  ──  YOUR_SERVER:HYSTERIA2_PORT (UDP)
     ↓
 Internet
 ```
 
-1. VpnService створює TUN-інтерфейс і перехоплює весь IP-трафік
-2. TunWorker читає TCP-пакети, встановлює SOCKS5-з'єднання для кожного потоку
-3. Go-бібліотека (gomobile) реалізує Hysteria2-протокол поверх QUIC
-4. Кожне TCP-з'єднання — окремий QUIC-стрім до сервера
+1. `VpnService` creates a TUN interface and intercepts all IP traffic
+2. `TunWorker` reads TCP packets and opens a SOCKS5 session for each flow
+3. The Go library (built with gomobile) implements the Hysteria2 protocol over QUIC
+4. Each TCP connection becomes a separate QUIC stream to the server
 
-## Структура
+## Project structure
 
 ```
 android/
 ├── go/
-│   ├── hysteria2.go        — Go пакет: QUIC-клієнт + локальний SOCKS5
-│   ├── go.mod              — залежність quic-go v0.59.0
+│   ├── hysteria2.go        — Go package: QUIC client + local SOCKS5 server
+│   ├── go.mod              — depends on quic-go v0.59.0
 │   └── build.sh            — gomobile bind → hysteria2.aar
 └── app/
     ├── build.gradle.kts
-    ├── libs/               — сюди кладеться hysteria2.aar після збірки
+    ├── libs/               — place hysteria2.aar here after building
     └── src/main/
         ├── AndroidManifest.xml
         └── kotlin/com/proxy/hysteria/
-            ├── App.kt              — Application, notification channel
+            ├── App.kt              — Application subclass, notification channel
             ├── Config.kt           — SharedPreferences (server/port/password)
-            ├── MainActivity.kt     — UI: поля, кнопка, статус
-            ├── ProxyVpnService.kt  — VpnService: TUN + Go клієнт
+            ├── MainActivity.kt     — UI: input fields, connect button, status
+            ├── ProxyVpnService.kt  — VpnService: TUN device + Go client
             └── TunWorker.kt        — tun2socks: IPv4/TCP → SOCKS5
 ```
 
-## Вимоги для збірки
+## Build requirements
 
-- **Go 1.23+** (для quic-go v0.59)
+- **Go 1.23+** (required by quic-go v0.59)
 - **Android NDK** r25+
 - **gomobile** (`go install golang.org/x/mobile/cmd/gomobile@latest`)
-- **Android Studio** Hedgehog (2023.1.1) або новіший
+- **Android Studio** Hedgehog (2023.1.1) or newer
 - **JDK 17**
 
-## Збірка
+## Build
 
-### Крок 1 — Зібрати Go AAR
+### Step 1 — Build the Go AAR
 
 ```bash
 cd android/go
 
-# Встановити gomobile (один раз)
+# Install gomobile (once)
 go install golang.org/x/mobile/cmd/gomobile@latest
 gomobile init
 
-# Зібрати бібліотеку для Android
+# Build the Android library
 ./build.sh
-# або вручну:
+# or manually:
 # gomobile bind -target=android -o ../app/libs/hysteria2.aar .
 ```
 
-Результат: `android/app/libs/hysteria2.aar`
+Output: `android/app/libs/hysteria2.aar`
 
-> **Примітка**: `build.sh` вимагає встановленого Android NDK.
-> Якщо NDK не знайдено, встанови його через Android Studio:
-> **SDK Manager → SDK Tools → NDK (Side by side)**
-> або вкажи шлях: `export ANDROID_NDK_HOME=~/Android/Sdk/ndk/<version>`
+> **Note**: `build.sh` requires the Android NDK.
+> Install it via Android Studio: **SDK Manager → SDK Tools → NDK (Side by side)**
+> or set the path manually: `export ANDROID_NDK_HOME=~/Android/Sdk/ndk/<version>`
 
-### Крок 2 — Відкрити в Android Studio
+### Step 2 — Build the Android app
 
-1. Відкрий папку `android/` в Android Studio
-2. **File → Sync Project with Gradle Files**
-3. **Build → Build Bundle(s) / APK(s) → Build APK(s)**
+Open `android/` in Android Studio, sync Gradle, then:
 
-або через командний рядок:
+**Build → Build Bundle(s) / APK(s) → Build APK(s)**
+
+Or from the command line:
 
 ```bash
 cd android
 ./gradlew assembleDebug
-# APK: app/build/outputs/apk/debug/app-debug.apk
+# Output: app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## Налаштування сервера
+## Server configuration
 
-Перед використанням застосунку запусти [mtproxy](../README.md) з увімкненим Hysteria2:
+Start [mtproxy](../README.md) with Hysteria2 enabled before using the app:
 
 ```bash
-SECRETS="alice:dd..."        \
-PORT=443                     \
-HYSTERIA2_PORT=8443          \
+SECRETS="alice:dd..."         \
+PORT=443                      \
+HYSTERIA2_PORT=8443           \
 HYSTERIA2_PASSWORD=mypassword \
 ./mtproxy
 ```
 
-## Використання
+## Usage
 
-1. Встанови APK на пристрій
-2. Введи дані підключення:
-   - **Server** — IP або домен сервера
-   - **Port** — UDP порт Hysteria2 (за замовч. `8443`)
-   - **Password** — `HYSTERIA2_PASSWORD` з конфігурації сервера
-   - **Skip TLS verify** — увімкни якщо сервер використовує self-signed сертифікат
-3. Натисни **Connect**
-4. Підтвердь запит на VPN-з'єднання
-5. Статус зміниться на **Connected** — весь трафік йде через тунель
+1. Install the APK on your device
+2. Enter connection details:
+   - **Server** — server IP or hostname
+   - **Port** — Hysteria2 UDP port (default `8443`)
+   - **Password** — value of `HYSTERIA2_PASSWORD` from the server config
+   - **Skip TLS verify** — enable if the server uses a self-signed certificate
+3. Tap **Connect**
+4. Accept the VPN permission prompt
+5. Status changes to **Connected** — all traffic now goes through the tunnel
 
-## Налагодження
+## Troubleshooting
 
-### Логи Go-клієнта
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `QUIC dial: timeout` | Server unreachable | Check IP/port and firewall (UDP must be open) |
+| `auth: server rejected` | Wrong password | Check `HYSTERIA2_PASSWORD` on the server |
+| `QUIC dial: tls: failed` | Certificate mismatch | Enable **Skip TLS verify** |
+| VPN won't connect | Permission not granted | Check Android VPN settings |
+| `listen :10808: address in use` | Port conflict | Restart the app |
+
+### Logcat
 
 ```bash
+# Go client logs
 adb logcat -s hysteria2
-```
 
-### Логи VPN-сервісу
-
-```bash
+# VPN service logs
 adb logcat -s ProxyVpnService TunWorker
 ```
 
-### Поширені помилки
+## Protocol
 
-| Помилка | Причина | Рішення |
-|---------|---------|---------|
-| `QUIC dial: timeout` | Сервер недосяжний | Перевір IP/порт, фаєрвол (UDP!) |
-| `auth: server rejected` | Неправильний пароль | Перевір `HYSTERIA2_PASSWORD` |
-| `QUIC dial: tls: failed` | Невалідний сертифікат | Увімкни **Skip TLS verify** |
-| VPN не підключається | Не прийнятий запит | Перевір налаштування VPN Android |
-| `listen :10808: address in use` | Порт зайнятий | Перезапусти застосунок |
+Hysteria2 runs a custom application protocol over TLS 1.3 + QUIC (UDP).
 
-## Протокол (коротко)
-
-Hysteria2 over QUIC — кастомний протокол поверх TLS 1.3 + QUIC (UDP).
-
-**Auth stream** (перший стрім, без type-байту):
+**Auth stream** (first stream opened by client, no type prefix):
 ```
 Client → Server:  [uint16 len][password bytes][uint64 rx=0]
 Server → Client:  [uint8 ok=1][uint64 rx][uint16 msg_len][msg]
 ```
 
-**TCP proxy stream** (кожне з'єднання):
+**TCP proxy stream** (one per connection):
 ```
 Client → Server:  [uint8 type=0x01][uint16 addr_len][host:port][uint32 req_id=0]
 Server → Client:  [uint8 ok=1][uint16 msg_len=0]
 → bidirectional relay
 ```
 
-## Безпека
+## Security notes
 
-- TLS 1.3 мінімум
-- ALPN `h3` — трафік виглядає як HTTP/3
-- Рекомендується використовувати реальний TLS-сертифікат (Let's Encrypt):
-  встанови `HYSTERIA2_CERT` і `HYSTERIA2_KEY` на сервері, вимкни **Skip TLS verify** в застосунку
+- TLS 1.3 minimum, ALPN `h3` (traffic resembles HTTP/3)
+- For production use, set a real TLS certificate on the server (`HYSTERIA2_CERT` / `HYSTERIA2_KEY`)
+  and disable **Skip TLS verify** in the app
 
-## Ліцензія
+## License
 
 MIT
