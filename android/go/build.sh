@@ -31,7 +31,7 @@ fi
 
 echo "==> Downloading Go module dependencies…"
 cd "${SCRIPT_DIR}"
-go mod download
+go mod tidy
 
 echo "==> Building Android AAR (targets: arm, arm64, 386, amd64)…"
 gomobile bind \

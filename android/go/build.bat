@@ -72,9 +72,9 @@ if not "%ANDROID_HOME%"=="" (
 :: ── Download dependencies ─────────────────────────────────────────────────────
 echo =^> Downloading Go module dependencies...
 cd /d "%SCRIPT_DIR%"
-go mod download
+go mod tidy
 if errorlevel 1 (
-    echo ERROR: go mod download failed.
+    echo ERROR: go mod tidy failed.
     exit /b 1
 )
 

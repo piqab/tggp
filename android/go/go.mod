@@ -2,7 +2,10 @@ module github.com/proxy/hysteria2
 
 go 1.23
 
-require github.com/quic-go/quic-go v0.59.0
+require (
+	github.com/quic-go/quic-go v0.59.0
+	golang.org/x/mobile v0.0.0-20250218173827-11a4b6b5b87b
+)
 
 require (
 	github.com/francoispqt/gojay v1.2.13 // indirect
